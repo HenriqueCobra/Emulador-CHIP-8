@@ -1,0 +1,20 @@
+# Build artifacts
+/build/
+*.o
+*.obj
+*.exe
+chip8
+chip8-emu
+
+# ROMs de jogos (domínio público, mas não versionar binários de terceiros)
+/roms/games/*
+/roms/tests/*
+!/roms/games/.gitkeep
+!/roms/tests/.gitkeep
+
+# Editores / SO
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
