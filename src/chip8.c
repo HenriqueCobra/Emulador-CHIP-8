@@ -188,15 +188,66 @@ void chip8_cycle(chip8_t *c)
         case 0x0: /* 8XY0 — LD Vx, Vy: cópia registrador→registrador */
             c->V[x] = c->V[y];
             break;
-        case 0x1: /* 8XY1 — OR Vx, Vy         */ /* TODO */ break;
-        case 0x2: /* 8XY2 — AND Vx, Vy        */ /* TODO */ break;
-        case 0x3: /* 8XY3 — XOR Vx, Vy        */ /* TODO */ break;
-        case 0x4: /* 8XY4 — ADD Vx, Vy (carry)*/ /* TODO */ break;
-        case 0x5: /* 8XY5 — SUB Vx, Vy (borrow)*/ /* TODO */ break;
-        case 0x6: /* 8XY6 — SHR Vx {, Vy}     */ /* TODO */ break;
-        case 0x7: /* 8XY7 — SUBN Vx, Vy       */ /* TODO */ break;
-        case 0xE: /* 8XYE — SHL Vx {, Vy}     */ /* TODO */ break;
-        default:  /* opcode inválido */ break;
+        case 0x1: /* 8XY1 — OR Vx, Vy.
+                   * Quirk histórico: o COSMAC VIP zerava VF aqui; CHIP-48
+                   * e as ROMs modernas (incl. os jogos-alvo) não. */
+            c->V[x] |= c->V[y];
+            break;
+
+        case 0x2: /* 8XY2 — AND Vx, Vy (mesmo quirk de VF do 8XY1) */
+            c->V[x] &= c->V[y];
+            break;
+
+        case 0x3: /* 8XY3 — XOR Vx, Vy (mesmo quirk de VF do 8XY1) */
+            c->V[x] ^= c->V[y];
+            break;
+
+        case 0x4: { /* 8XY4 — ADD Vx, Vy: VF = carry (1 se estourou 255).
+                     * Soma em 16 bits para não perder o 9º bit; VF por
+                     * último para o caso x == 0xF. */
+            uint16_t sum = (uint16_t)(c->V[x] + c->V[y]);
+            c->V[x]   = (uint8_t)sum;
+            c->V[0xF] = (sum > 0xFF) ? 1 : 0;
+            break;
+        }
+
+        case 0x5: { /* 8XY5 — SUB Vx, Vy: Vx = Vx - Vy.
+                     * VF = 1 quando NÃO houve empréstimo (Vx >= Vy). */
+            uint8_t no_borrow = (c->V[x] >= c->V[y]) ? 1 : 0;
+            c->V[x]   = (uint8_t)(c->V[x] - c->V[y]);
+            c->V[0xF] = no_borrow;
+            break;
+        }
+
+        case 0x6: { /* 8XY6 — SHR Vx: desloca 1 bit à direita.
+                     * VF = bit 0 (o que "cai"). Quirk CHIP-48: desloca o
+                     * próprio Vx e ignora Vy. */
+            uint8_t lsb = c->V[x] & 0x1;
+            c->V[x] >>= 1;
+            c->V[0xF] = lsb;
+            break;
+        }
+
+        case 0x7: { /* 8XY7 — SUBN Vx, Vy: Vx = Vy - Vx.
+                     * VF = 1 quando NÃO houve empréstimo (Vy >= Vx). */
+            uint8_t no_borrow = (c->V[y] >= c->V[x]) ? 1 : 0;
+            c->V[x]   = (uint8_t)(c->V[y] - c->V[x]);
+            c->V[0xF] = no_borrow;
+            break;
+        }
+
+        case 0xE: { /* 8XYE — SHL Vx: desloca 1 bit à esquerda.
+                     * VF = bit 7 (o que "cai"). Mesmo quirk CHIP-48. */
+            uint8_t msb = (uint8_t)((c->V[x] & 0x80) >> 7);
+            c->V[x]   = (uint8_t)(c->V[x] << 1);
+            c->V[0xF] = msb;
+            break;
+        }
+
+        default: /* nibble baixo inválido para a família 0x8 */
+            fprintf(stderr, "opcode desconhecido: 0x%04X (pc=0x%03X)\n",
+                    c->opcode, c->pc - 2);
+            break;
         }
         break;
 
