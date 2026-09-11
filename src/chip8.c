@@ -157,9 +157,19 @@ void chip8_cycle(chip8_t *c)
         c->stack[c->sp++] = c->pc;
         c->pc = nnn;
         break;
-    case 0x3000: /* 3XNN — SE Vx, NN          */ /* TODO */ break;
-    case 0x4000: /* 4XNN — SNE Vx, NN         */ /* TODO */ break;
-    case 0x5000: /* 5XY0 — SE Vx, Vy          */ /* TODO */ break;
+    case 0x3000: /* 3XNN — SE Vx, NN: pula a próxima instrução se Vx == NN.
+                  * "Pular" = pc += 2 (o fetch já avançou uma instrução). */
+        if (c->V[x] == nn) c->pc += 2;
+        break;
+
+    case 0x4000: /* 4XNN — SNE Vx, NN: pula se Vx != NN */
+        if (c->V[x] != nn) c->pc += 2;
+        break;
+
+    case 0x5000: /* 5XY0 — SE Vx, Vy: pula se Vx == Vy.
+                  * O padrão só define esta forma (nibble baixo = 0). */
+        if (c->V[x] == c->V[y]) c->pc += 2;
+        break;
 
     case 0x6000: /* 6XNN — LD Vx, NN: carrega a constante de 8 bits em Vx.
                   * Não há flag nem overflow: NN já cabe em uint8_t. */
@@ -190,7 +200,9 @@ void chip8_cycle(chip8_t *c)
         }
         break;
 
-    case 0x9000: /* 9XY0 — SNE Vx, Vy         */ /* TODO */ break;
+    case 0x9000: /* 9XY0 — SNE Vx, Vy: pula se Vx != Vy */
+        if (c->V[x] != c->V[y]) c->pc += 2;
+        break;
 
     case 0xA000: /* ANNN — LD I, addr: registrador de índice recebe
                   * um endereço de 12 bits. I é a base de quase todo
