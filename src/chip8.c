@@ -112,14 +112,14 @@ void chip8_cycle(chip8_t *c)
      *
      * A CPU decide a instrução pelo nibble alto; famílias 0x0/0x8/0xE/0xF
      * precisam de um segundo nível de switch. */
-    uint16_t nnn = c->opcode & 0x0FFF;
-    uint8_t  nn  = c->opcode & 0x00FF;
-    uint8_t  n   = c->opcode & 0x000F;
-    uint8_t  x   = (c->opcode & 0x0F00) >> 8;
-    uint8_t  y   = (c->opcode & 0x00F0) >> 4;
+    uint16_t nnn = c->opcode & 0x0FFF;             /* endereço (12 bits)      */
+    uint8_t  nn  = (uint8_t)(c->opcode & 0x00FF);  /* constante de 8 bits     */
+    uint8_t  n   = (uint8_t)(c->opcode & 0x000F);  /* nibble baixo            */
+    uint8_t  x   = (uint8_t)((c->opcode & 0x0F00) >> 8); /* índice de reg.    */
+    uint8_t  y   = (uint8_t)((c->opcode & 0x00F0) >> 4); /* índice de reg.    */
 
-    /* silencia -Wunused enquanto os opcodes não estão implementados */
-    (void)nnn; (void)nn; (void)n; (void)x; (void)y;
+    /* silencia -Wunused enquanto os opcodes restantes não estão implementados */
+    (void)n;
 
     switch (c->opcode & 0xF000) {
 
@@ -131,17 +131,34 @@ void chip8_cycle(chip8_t *c)
         }
         break;
 
-    case 0x1000: /* 1NNN — JP addr            */ /* TODO */ break;
+    case 0x1000: /* 1NNN — JP addr: salto incondicional.
+                  * pc já foi incrementado no fetch; aqui simplesmente
+                  * sobrescrevemos com o alvo de 12 bits. */
+        c->pc = nnn;
+        break;
+
     case 0x2000: /* 2NNN — CALL addr          */ /* TODO */ break;
     case 0x3000: /* 3XNN — SE Vx, NN          */ /* TODO */ break;
     case 0x4000: /* 4XNN — SNE Vx, NN         */ /* TODO */ break;
     case 0x5000: /* 5XY0 — SE Vx, Vy          */ /* TODO */ break;
-    case 0x6000: /* 6XNN — LD Vx, NN          */ /* TODO */ break;
-    case 0x7000: /* 7XNN — ADD Vx, NN         */ /* TODO */ break;
+
+    case 0x6000: /* 6XNN — LD Vx, NN: carrega a constante de 8 bits em Vx.
+                  * Não há flag nem overflow: NN já cabe em uint8_t. */
+        c->V[x] = nn;
+        break;
+
+    case 0x7000: /* 7XNN — ADD Vx, NN: Vx += NN.
+                  * ATENÇÃO: não altera VF, mesmo estourando 255.
+                  * O wrap mod 256 é a própria semântica de uint8_t em C;
+                  * o cast só torna a intenção explícita. */
+        c->V[x] = (uint8_t)(c->V[x] + nn);
+        break;
 
     case 0x8000:
         switch (c->opcode & 0x000F) {
-        case 0x0: /* 8XY0 — LD Vx, Vy         */ /* TODO */ break;
+        case 0x0: /* 8XY0 — LD Vx, Vy: cópia registrador→registrador */
+            c->V[x] = c->V[y];
+            break;
         case 0x1: /* 8XY1 — OR Vx, Vy         */ /* TODO */ break;
         case 0x2: /* 8XY2 — AND Vx, Vy        */ /* TODO */ break;
         case 0x3: /* 8XY3 — XOR Vx, Vy        */ /* TODO */ break;
@@ -155,7 +172,13 @@ void chip8_cycle(chip8_t *c)
         break;
 
     case 0x9000: /* 9XY0 — SNE Vx, Vy         */ /* TODO */ break;
-    case 0xA000: /* ANNN — LD I, addr         */ /* TODO */ break;
+
+    case 0xA000: /* ANNN — LD I, addr: registrador de índice recebe
+                  * um endereço de 12 bits. I é a base de quase todo
+                  * acesso à memória (sprites, BCD, load/store). */
+        c->I = nnn;
+        break;
+
     case 0xB000: /* BNNN — JP V0, addr        */ /* TODO */ break;
     case 0xC000: /* CXNN — RND Vx, NN         */ /* TODO */ break;
     case 0xD000: /* DXYN — DRW Vx, Vy, N      */ /* TODO */ break;
