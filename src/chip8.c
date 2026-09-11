@@ -126,7 +126,17 @@ void chip8_cycle(chip8_t *c)
     case 0x0000:
         switch (c->opcode & 0x00FF) {
         case 0x00E0: /* CLS  — limpa a tela                        */ /* TODO */ break;
-        case 0x00EE: /* RET  — retorna de sub-rotina               */ /* TODO */ break;
+
+        case 0x00EE: /* RET — retorna de sub-rotina: desempilha o
+                      * endereço de retorno para o pc. */
+            if (c->sp == 0) {
+                fprintf(stderr, "stack underflow em RET (pc=0x%03X)\n",
+                        c->pc - 2);
+                break;
+            }
+            c->pc = c->stack[--c->sp];
+            break;
+
         default:     /* 0NNN — SYS addr (ignorado em emuladores)   */ break;
         }
         break;
@@ -137,7 +147,16 @@ void chip8_cycle(chip8_t *c)
         c->pc = nnn;
         break;
 
-    case 0x2000: /* 2NNN — CALL addr          */ /* TODO */ break;
+    case 0x2000: /* 2NNN — CALL addr: chama sub-rotina.
+                  * Empilha o pc atual (que o fetch já avançou para a
+                  * instrução seguinte) e desvia para o alvo. */
+        if (c->sp >= CHIP8_STACK_SIZE) {
+            fprintf(stderr, "stack overflow em CALL (pc=0x%03X)\n", c->pc - 2);
+            break;
+        }
+        c->stack[c->sp++] = c->pc;
+        c->pc = nnn;
+        break;
     case 0x3000: /* 3XNN — SE Vx, NN          */ /* TODO */ break;
     case 0x4000: /* 4XNN — SNE Vx, NN         */ /* TODO */ break;
     case 0x5000: /* 5XY0 — SE Vx, Vy          */ /* TODO */ break;
