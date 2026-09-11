@@ -129,7 +129,9 @@ void chip8_cycle(chip8_t *c)
     uint8_t  x   = (uint8_t)((c->opcode & 0x0F00) >> 8); /* índice de reg.    */
     uint8_t  y   = (uint8_t)((c->opcode & 0x00F0) >> 4); /* índice de reg.    */
 
-
+    /* -------- EXECUTE --------------------------------------------------
+     * Dispatch pelo nibble alto. As famílias 0x0/0x8/0xE/0xF têm um
+     * segundo switch (pelo byte baixo, ou pelo nibble baixo em 0x8). */
     switch (c->opcode & 0xF000) {
 
     case 0x0000:
@@ -169,6 +171,7 @@ void chip8_cycle(chip8_t *c)
         c->stack[c->sp++] = c->pc;
         c->pc = nnn;
         break;
+
     case 0x3000: /* 3XNN — SE Vx, NN: pula a próxima instrução se Vx == NN.
                   * "Pular" = pc += 2 (o fetch já avançou uma instrução). */
         if (c->V[x] == nn) c->pc += 2;
@@ -200,6 +203,7 @@ void chip8_cycle(chip8_t *c)
         case 0x0: /* 8XY0 — LD Vx, Vy: cópia registrador→registrador */
             c->V[x] = c->V[y];
             break;
+
         case 0x1: /* 8XY1 — OR Vx, Vy.
                    * Quirk histórico: o COSMAC VIP zerava VF aqui; CHIP-48
                    * e as ROMs modernas (incl. os jogos-alvo) não. */
@@ -284,6 +288,7 @@ void chip8_cycle(chip8_t *c)
                   * A semente do rand() é definida uma vez em main(). */
         c->V[x] = (uint8_t)((rand() & 0xFF) & nn);
         break;
+
     case 0xD000: { /* DXYN — DRW Vx, Vy, N: desenha um sprite XOR de 8×N
                     * pixels lido de memory[I], em (Vx, Vy). VF = colisão. */
         int x0 = c->V[x] % CHIP8_DISPLAY_W;   /* origem faz wrap...            */
@@ -339,6 +344,7 @@ void chip8_cycle(chip8_t *c)
         case 0x07: /* FX07 — LD Vx, DT: lê o delay timer */
             c->V[x] = c->delay_timer;
             break;
+
         case 0x0A: { /* FX0A — LD Vx, K: espera "bloqueante" por uma tecla e
                       * guarda o código dela em Vx.
                       * Como não podemos travar o loop (render e input
@@ -358,6 +364,7 @@ void chip8_cycle(chip8_t *c)
                 c->pc -= 2;
             break;
         }
+
         case 0x15: /* FX15 — LD DT, Vx: arma o delay timer */
             c->delay_timer = c->V[x];
             break;
@@ -389,6 +396,7 @@ void chip8_cycle(chip8_t *c)
             c->memory[(c->I + 2) & 0x0FFF] = (uint8_t)(val % 10);
             break;
         }
+
         case 0x55: /* FX55 — LD [I], V0..Vx: grava V0..Vx (inclusive) em
                     * memory[I..I+x]. */
             for (uint8_t r = 0; r <= x; r++)
