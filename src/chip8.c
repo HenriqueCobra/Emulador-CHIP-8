@@ -318,7 +318,9 @@ void chip8_cycle(chip8_t *c)
 
     case 0xF000:
         switch (c->opcode & 0x00FF) {
-        case 0x07: /* FX07 — LD Vx, DT         */ /* TODO */ break;
+        case 0x07: /* FX07 — LD Vx, DT: lê o delay timer */
+            c->V[x] = c->delay_timer;
+            break;
         case 0x0A: { /* FX0A — LD Vx, K: espera "bloqueante" por uma tecla e
                       * guarda o código dela em Vx.
                       * Como não podemos travar o loop (render e input
@@ -338,11 +340,37 @@ void chip8_cycle(chip8_t *c)
                 c->pc -= 2;
             break;
         }
-        case 0x15: /* FX15 — LD DT, Vx         */ /* TODO */ break;
-        case 0x18: /* FX18 — LD ST, Vx         */ /* TODO */ break;
-        case 0x1E: /* FX1E — ADD I, Vx         */ /* TODO */ break;
-        case 0x29: /* FX29 — LD F, Vx (sprite do dígito) */ /* TODO */ break;
-        case 0x33: /* FX33 — LD B, Vx (BCD)    */ /* TODO */ break;
+        case 0x15: /* FX15 — LD DT, Vx: arma o delay timer */
+            c->delay_timer = c->V[x];
+            break;
+
+        case 0x18: /* FX18 — LD ST, Vx: arma o sound timer (>0 => bipe) */
+            c->sound_timer = c->V[x];
+            break;
+
+        case 0x1E: /* FX1E — ADD I, Vx: I += Vx.
+                    * Wrap natural em 16 bits. Não mexemos em VF: o "quirk
+                    * do overflow de I" é da linhagem Amiga e as ROMs alvo
+                    * não dependem dele. */
+            c->I = (uint16_t)(c->I + c->V[x]);
+            break;
+
+        case 0x29: /* FX29 — LD F, Vx: I aponta para o sprite do dígito
+                    * hexadecimal em Vx. O fontset foi carregado em
+                    * CHIP8_FONT_START e cada dígito ocupa 5 bytes. */
+            c->I = (uint16_t)(CHIP8_FONT_START + (c->V[x] & 0x0F) * 5);
+            break;
+
+        case 0x33: { /* FX33 — LD B, Vx: representação decimal (BCD) de Vx.
+                      * centena -> memory[I], dezena -> [I+1], unidade -> [I+2].
+                      * É assim que os jogos desenham placar: extrai cada
+                      * dígito e usa FX29 + DXYN. */
+            uint8_t val = c->V[x];
+            c->memory[(c->I + 0) & 0x0FFF] = (uint8_t)(val / 100);
+            c->memory[(c->I + 1) & 0x0FFF] = (uint8_t)((val / 10) % 10);
+            c->memory[(c->I + 2) & 0x0FFF] = (uint8_t)(val % 10);
+            break;
+        }
         case 0x55: /* FX55 — LD [I], V0..Vx    */ /* TODO */ break;
         case 0x65: /* FX65 — LD V0..Vx, [I]    */ /* TODO */ break;
         default:   break;
