@@ -1,7 +1,18 @@
 #include "chip8.h"
 
 #include <stdio.h>
+#include <stdlib.h>   /* rand() */
 #include <string.h>
+
+/* ---------------------------------------------------------------------------
+ * Quirk de load/store (FX55 / FX65)
+ *
+ * O interpretador CHIP-8 original avançava I para I + X + 1 ao terminar.
+ * CHIP-48 avança I + X; SCHIP deixa I intacto. Os jogos clássicos
+ * (PONG, TETRIS, INVADERS) foram escritos para o comportamento original.
+ *   1 = avança I  (original)   |   0 = mantém I  (SCHIP)
+ * ------------------------------------------------------------------------- */
+#define CHIP8_QUIRK_LOADSTORE_INC_I 1
 
 /* ---------------------------------------------------------------------------
  * Fontset embutido: 16 caracteres hexadecimais (0-F), 5 bytes cada.
@@ -118,8 +129,6 @@ void chip8_cycle(chip8_t *c)
     uint8_t  x   = (uint8_t)((c->opcode & 0x0F00) >> 8); /* índice de reg.    */
     uint8_t  y   = (uint8_t)((c->opcode & 0x00F0) >> 4); /* índice de reg.    */
 
-    /* silencia -Wunused enquanto os opcodes restantes não estão implementados */
-    (void)n;
 
     switch (c->opcode & 0xF000) {
 
@@ -264,8 +273,17 @@ void chip8_cycle(chip8_t *c)
         c->I = nnn;
         break;
 
-    case 0xB000: /* BNNN — JP V0, addr        */ /* TODO */ break;
-    case 0xC000: /* CXNN — RND Vx, NN         */ /* TODO */ break;
+    case 0xB000: /* BNNN — JP V0, addr: salto com offset, pc = NNN + V0.
+                  * (SCHIP reinterpreta como BXNN = XNN + Vx; usamos a forma
+                  * clássica, esperada pelas ROMs alvo.) */
+        c->pc = (uint16_t)(nnn + c->V[0]);
+        break;
+
+    case 0xC000: /* CXNN — RND Vx, NN: Vx = byte aleatório AND NN.
+                  * O AND NN é a máscara com que o jogo limita o intervalo.
+                  * A semente do rand() é definida uma vez em main(). */
+        c->V[x] = (uint8_t)((rand() & 0xFF) & nn);
+        break;
     case 0xD000: { /* DXYN — DRW Vx, Vy, N: desenha um sprite XOR de 8×N
                     * pixels lido de memory[I], em (Vx, Vy). VF = colisão. */
         int x0 = c->V[x] % CHIP8_DISPLAY_W;   /* origem faz wrap...            */
@@ -371,9 +389,27 @@ void chip8_cycle(chip8_t *c)
             c->memory[(c->I + 2) & 0x0FFF] = (uint8_t)(val % 10);
             break;
         }
-        case 0x55: /* FX55 — LD [I], V0..Vx    */ /* TODO */ break;
-        case 0x65: /* FX65 — LD V0..Vx, [I]    */ /* TODO */ break;
-        default:   break;
+        case 0x55: /* FX55 — LD [I], V0..Vx: grava V0..Vx (inclusive) em
+                    * memory[I..I+x]. */
+            for (uint8_t r = 0; r <= x; r++)
+                c->memory[(c->I + r) & 0x0FFF] = c->V[r];
+#if CHIP8_QUIRK_LOADSTORE_INC_I
+            c->I = (uint16_t)(c->I + x + 1);
+#endif
+            break;
+
+        case 0x65: /* FX65 — LD V0..Vx, [I]: lê memory[I..I+x] para V0..Vx */
+            for (uint8_t r = 0; r <= x; r++)
+                c->V[r] = c->memory[(c->I + r) & 0x0FFF];
+#if CHIP8_QUIRK_LOADSTORE_INC_I
+            c->I = (uint16_t)(c->I + x + 1);
+#endif
+            break;
+
+        default:
+            fprintf(stderr, "opcode desconhecido: 0x%04X (pc=0x%03X)\n",
+                    c->opcode, c->pc - 2);
+            break;
         }
         break;
 

@@ -1,6 +1,7 @@
 #include <SDL2/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "chip8.h"
 #include "display.h"
@@ -29,6 +30,9 @@ int main(int argc, char **argv)
         fprintf(stderr, "uso: %s <rom>\n", argv[0]);
         return EXIT_FAILURE;
     }
+
+    /* Semente do gerador usado pelo opcode CXNN (RND). Uma vez só. */
+    srand((unsigned)time(NULL));
 
     chip8_t chip8;
     chip8_init(&chip8);
