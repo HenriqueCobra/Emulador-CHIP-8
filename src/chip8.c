@@ -299,16 +299,45 @@ void chip8_cycle(chip8_t *c)
 
     case 0xE000:
         switch (c->opcode & 0x00FF) {
-        case 0x9E: /* EX9E — SKP Vx  (tecla Vx pressionada) */ /* TODO */ break;
-        case 0xA1: /* EXA1 — SKNP Vx (tecla Vx solta)       */ /* TODO */ break;
-        default:   break;
+        case 0x9E: /* EX9E — SKP Vx: pula a próxima instrução se a tecla
+                    * cujo código está em Vx estiver pressionada. */
+            if (c->keypad[c->V[x] & 0x0F]) c->pc += 2;
+            break;
+
+        case 0xA1: /* EXA1 — SKNP Vx: pula se essa tecla NÃO estiver
+                    * pressionada (o par complementar de EX9E). */
+            if (!c->keypad[c->V[x] & 0x0F]) c->pc += 2;
+            break;
+
+        default:
+            fprintf(stderr, "opcode desconhecido: 0x%04X (pc=0x%03X)\n",
+                    c->opcode, c->pc - 2);
+            break;
         }
         break;
 
     case 0xF000:
         switch (c->opcode & 0x00FF) {
         case 0x07: /* FX07 — LD Vx, DT         */ /* TODO */ break;
-        case 0x0A: /* FX0A — LD Vx, K (espera tecla) */ /* TODO */ break;
+        case 0x0A: { /* FX0A — LD Vx, K: espera "bloqueante" por uma tecla e
+                      * guarda o código dela em Vx.
+                      * Como não podemos travar o loop (render e input
+                      * parariam), se nada está pressionado recuamos o pc em 2
+                      * para reexecutar esta mesma instrução no próximo ciclo.
+                      * (O hardware original também esperava a SOLTURA da tecla;
+                      * aqui registramos já no pressionar — suficiente p/ as ROMs alvo.) */
+            bool pressed = false;
+            for (uint8_t k = 0; k < CHIP8_NUM_KEYS; k++) {
+                if (c->keypad[k]) {
+                    c->V[x] = k;
+                    pressed = true;
+                    break;
+                }
+            }
+            if (!pressed)
+                c->pc -= 2;
+            break;
+        }
         case 0x15: /* FX15 — LD DT, Vx         */ /* TODO */ break;
         case 0x18: /* FX18 — LD ST, Vx         */ /* TODO */ break;
         case 0x1E: /* FX1E — ADD I, Vx         */ /* TODO */ break;
