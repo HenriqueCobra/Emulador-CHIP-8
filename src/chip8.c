@@ -125,7 +125,10 @@ void chip8_cycle(chip8_t *c)
 
     case 0x0000:
         switch (c->opcode & 0x00FF) {
-        case 0x00E0: /* CLS  — limpa a tela                        */ /* TODO */ break;
+        case 0x00E0: /* CLS — zera o framebuffer inteiro */
+            memset(c->display, 0, sizeof(c->display));
+            c->draw_flag = true;
+            break;
 
         case 0x00EE: /* RET — retorna de sub-rotina: desempilha o
                       * endereço de retorno para o pc. */
@@ -263,7 +266,36 @@ void chip8_cycle(chip8_t *c)
 
     case 0xB000: /* BNNN — JP V0, addr        */ /* TODO */ break;
     case 0xC000: /* CXNN — RND Vx, NN         */ /* TODO */ break;
-    case 0xD000: /* DXYN — DRW Vx, Vy, N      */ /* TODO */ break;
+    case 0xD000: { /* DXYN — DRW Vx, Vy, N: desenha um sprite XOR de 8×N
+                    * pixels lido de memory[I], em (Vx, Vy). VF = colisão. */
+        int x0 = c->V[x] % CHIP8_DISPLAY_W;   /* origem faz wrap...            */
+        int y0 = c->V[y] % CHIP8_DISPLAY_H;
+
+        c->V[0xF] = 0;                        /* nenhuma colisão até prova em contrário */
+
+        for (int row = 0; row < n; row++) {
+            int py = y0 + row;
+            if (py >= CHIP8_DISPLAY_H) break; /* ...mas o transbordo é clipado */
+
+            uint8_t sprite = c->memory[(c->I + row) & 0x0FFF];
+
+            for (int col = 0; col < 8; col++) {
+                int px = x0 + col;
+                if (px >= CHIP8_DISPLAY_W) break;
+
+                /* MSB = pixel da esquerda; pixel 0 do sprite não altera a tela */
+                if (((sprite >> (7 - col)) & 0x1) == 0)
+                    continue;
+
+                int idx = py * CHIP8_DISPLAY_W + px;
+                if (c->display[idx])             /* apagar um pixel aceso = colisão */
+                    c->V[0xF] = 1;
+                c->display[idx] ^= 1u;
+            }
+        }
+        c->draw_flag = true;
+        break;
+    }
 
     case 0xE000:
         switch (c->opcode & 0x00FF) {
